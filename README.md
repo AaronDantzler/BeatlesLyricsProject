@@ -30,7 +30,8 @@ In this project, I tried to visualize and examine any cool patterns that might o
 
 ![image](https://github.com/AaronDantzler/BeatlesLyricsProject/assets/113250815/9e611dbf-4f09-4b36-b23f-52c2a32ffabf)
 
-![image](https://github.com/AaronDantzler/BeatlesLyricsProject/assets/113250815/ce8864bd-7ba1-4bc3-a17c-21b1eb075d0d)
+![image](https://github.com/AaronDantzler/BeatlesLyricsProject/assets/113250815/81ccefd8-dc50-47f2-b29b-73d83f09a5ed)
+
 
 
 
