@@ -1,0 +1,289 @@
+---
+title: "BeatlesTextAnalysis"
+author: "Aaron Dantzler"
+date: "2023-08-05"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# load packages
+library(tidytext)
+library(dplyr)
+library(tm)
+library(tidyr)
+library(ggplot2)
+```
+
+```{r}
+# clean lyrics data
+lyrics_raw <- read.csv("D:\\Princeton\\Beatles Lyrics Project\\clean-lyrics.csv")
+
+albums_to_keep <- c("1967-1970", "A Collection of Beatles Oldies", "A Hard Day's Night", "Abbey Road", "Beatles for Sale", "Help!", "Let It Be", "Magical Mystery Tour", "Please Please Me", "Revolver", "Rubber Soul", "Sgt. Pepper's Lonely Hearts Club Band", "The Beatles", "With the Beatles", "Yellow Submarine")
+
+lyrics <- lyrics_raw %>% filter(album %in% albums_to_keep)
+lyrics <- lyrics %>% filter(cover == "FALSE")
+lyrics <- lyrics %>% filter(title != "Flying", title != "Jessie's Dream", title != "Revolution 9")
+
+lyrics <- arrange(lyrics, title)
+```
+
+```{r}
+# more cleaning
+lyrics$album[lyrics$album == "1967-1970"] <- NA
+lyrics$album[lyrics$album == "A Collection of Beatles Oldies"] <- NA
+```
+
+```{r}
+# more cleaning
+old_value = c('["John Lennon"]', '["Paul McCartney"]', '["Paul McCartney", "John Lennon"]', '["George Harrison"]', '["John Lennon", "Paul McCartney", "George Harrison", "Ringo Starr"]', '["John Lennon", "Paul McCartney", "Ringo Starr"]', '["John Lennon", "Paul McCartney"]', '["Paul McCartney", "John Lennon", "Donovan"]', '["Ringo Starr"]')
+new_value = c('Lennon', 'McCartney', 'Lennon/McCartney', 'Harrison', 'Lennon/McCartney/Harrison/Starr', 'Lennon/McCartney/Starr', 'Lennon/McCartney', 'McCartney', 'Starr')
+lookup_table <- data.frame(old_value, new_value, stringsAsFactors = FALSE)
+
+lyrics$songwriters_parsed <- lookup_table$new_value[match(lyrics$songwriters_parsed, lookup_table$old_value)]
+```
+
+```{r}
+# more cleaning
+old_value = c('["Harrison", "Harrison", "Harrison"]', '["Harrison", "Lennon", "McCartney"]', '["Harrison"]', '["Lennon", "McCartney", "Harrison"]', '["Lennon", "McCartney"]', '["Lennon", "with McCartney"]', '["Lennon"]', '["McCartney", "Lennon", "Harrison", "Starr"]', '["McCartney", "Lennon"]', '["McCartney"]', '["Starr", "Lennon", "McCartney"]', '["Starr"]', 'Lennon/Harrison/Starr')
+new_value = c('Harrison', 'Lennon/McCartney/Harrison', 'Harrison', 'Lennon/McCartney/Harrison', 'Lennon/McCartney', 'Lennon/McCartney', 'Lennon', 'Lennon/McCartney/Harrison/Starr', 'Lennon/McCartney', 'McCartney', 'Lennon/McCartney/Starr', 'Starr', 'Lennon/Harrison/Starr')
+lookup_table <- data.frame(old_value, new_value, stringsAsFactors = FALSE)
+
+lyrics$vocals_parsed <- lookup_table$new_value[match(lyrics$vocals_parsed, lookup_table$old_value)]
+```
+
+```{r}
+# making indicator variables for songwriter and vocals
+
+# songwriter
+target_values <- c("Harrison", "Lennon/McCartney/Harrison/Starr")
+lyrics$songwriter_Harrison <- ifelse(lyrics$songwriters_parsed %in% target_values, 1, 0)
+
+target_values <- c("Lennon", "Lennon/McCartney", "Lennon/McCartney/Harrison/Starr", "Lennon/McCartney/Starr")
+lyrics$songwriter_Lennon <- ifelse(lyrics$songwriters_parsed %in% target_values, 1, 0)
+
+target_values <- c("McCartney", "Lennon/McCartney", "Lennon/McCartney/Harrison/Starr", "Lennon/McCartney/Starr")
+lyrics$songwriter_McCartney <- ifelse(lyrics$songwriters_parsed %in% target_values, 1, 0)
+
+target_values <- c("Starr", "Lennon/McCartney/Harrison/Starr", "Lennon/McCartney/Starr")
+lyrics$songwriter_Starr <- ifelse(lyrics$songwriters_parsed %in% target_values, 1, 0)
+
+# vocals
+target_values <- c("Harrison", "Lennon/McCartney/Harrison", "Lennon/McCartney/Harrison/Starr")
+lyrics$vocals_Harrison <- ifelse(lyrics$vocals_parsed %in% target_values, 1, 0)
+
+target_values <- c("Lennon", "Lennon/Harrison/Starr", "Lennon/McCartney", "Lennon/McCartney/Harrison", "Lennon/McCartney/Harrison/Starr", "Lennon/McCartney/Starr")
+lyrics$vocals_Lennon <- ifelse(lyrics$vocals_parsed %in% target_values, 1, 0)
+
+target_values <- c("Lennon/McCartney", "Lennon/McCartney/Harrison", "Lennon/McCartney/Harrison/Starr", "Lennon/McCartney/Starr", "McCartney")
+lyrics$vocals_McCartney <- ifelse(lyrics$vocals_parsed %in% target_values, 1, 0)
+
+target_values <- c("Starr", "Lennon/McCartney/Harrison/Starr", "Lennon/McCartney/Starr")
+lyrics$vocals_Starr <- ifelse(lyrics$vocals_parsed %in% target_values, 1, 0)
+```
+
+```{r}
+# load lexicons
+afinn <- get_sentiments("afinn")
+bing <- get_sentiments("bing")
+nrc <- get_sentiments("nrc")
+```
+
+```{r}
+# process data into VCorpus
+lyrics <- data.frame(doc_id = lyrics$title, text = lyrics$lyrics, album = lyrics$album, year = lyrics$year, songwriters = lyrics$songwriters_parsed, vocals = lyrics$vocals_parsed, songwriter_Harrison = lyrics$songwriter_Harrison, songwriter_Lennon = lyrics$songwriter_Lennon, songwriter_McCartney = lyrics$songwriter_McCartney, songwriter_Starr = lyrics$songwriter_Starr, vocals_Harrison = lyrics$vocals_Harrison, vocals_Lennon = lyrics$vocals_Lennon, vocals_McCartney = lyrics$vocals_McCartney, vocals_Starr = lyrics$vocals_Starr)
+
+docs <- VCorpus(DataframeSource(lyrics))
+```
+
+```{r}
+# more data cleaning
+# tm_map is buggy when you run it multiple times, so be sure to always save as a new object
+docs1 <- tm_map(docs, stripWhitespace)
+docs2 <- tm_map(docs1, content_transformer(tolower))
+docs3 <- tm_map(docs2, removeWords, stopwords("english"))
+docs4 <- tm_map(docs3, removePunctuation)
+docs8 <- tm_map(docs4, content_transformer(gsub), pattern = "\"", replacement = "", docs4)
+docs9 <- tm_map(docs8, content_transformer(gsub), pattern = "'", replacement = "", docs8)
+rm(docs1,docs2,docs3,docs4,docs8)
+```
+
+```{r}
+# make dtm
+dtm <- DocumentTermMatrix(docs9)
+```
+
+```{r}
+# 4. Join to sentiment lexicon:
+#   Pick the lexicon that you want to use
+c <- tidy(dtm) ##input: a document-term matrix
+```
+
+```{r}
+#join the table to the bing lexicon
+c_sentiments <- c %>%
+  left_join(bing, by = c("term" = "word"))
+```
+
+```{r}
+#inspect the join
+c_sentiments
+```
+
+```{r}
+##aggregate sentiment to the document level
+c_sent_by_song <- c_sentiments %>%
+  count(document, sentiment, wt = count) %>%
+  spread(sentiment, n, fill = 0) %>%
+  mutate(sentiment = positive - negative) # %>%
+  # arrange(sentiment)
+
+c_sent_by_song
+
+c_sent_by_song <- arrange(c_sent_by_song, document)
+```
+
+```{r}
+lyrics_sent <- bind_cols(lyrics, c_sent_by_song)
+lyrics_sent <- subset(lyrics_sent, select = -document)
+lyrics_sent$year <- as.factor(lyrics_sent$year)
+```
+
+```{r}
+
+model <- lm(sentiment ~ album + year + songwriter_Starr + songwriter_McCartney + songwriter_Lennon + songwriter_Harrison + vocals_Starr + vocals_McCartney + vocals_Lennon + vocals_Harrison, data = lyrics_sent)
+
+summary(model)
+
+```
+
+```{r}
+
+
+# Create the long-format representation for vocals and sentiment
+long_lyrics_sent <- lyrics_sent %>%
+  pivot_longer(cols = starts_with("vocals_"),
+               names_to = "songwriter",
+               values_to = "sang_on") %>%
+  filter(sang_on == 1) %>%
+  select(-sang_on) %>%
+  left_join(., lyrics_sent %>% select(doc_id, sentiment), by = "doc_id")
+
+# Calculate the number of songs each Beatle sang on and their average sentiment score
+songs_and_sentiment_by_beatle <- long_lyrics_sent %>%
+  group_by(songwriter) %>%
+  summarise(total_songs_sang_on = n_distinct(doc_id),
+            average_sentiment = mean(sentiment.x, na.rm = TRUE))
+
+# Create the grouped bar graph using ggplot2
+ggplot(data = songs_and_sentiment_by_beatle, aes(x = songwriter)) +
+  geom_col(aes(y = total_songs_sang_on, fill = "Songs Sang On"), width = 0.4, position = "dodge") +
+  geom_col(aes(y = average_sentiment, fill = "Average Sentiment"), width = 0.4, position = "dodge") +
+  labs(title = "Number of Songs Each Beatle Sang On and Average Sentiment Score",
+       x = "Beatle (Singer)",
+       y = "Count / Sentiment Score") +
+  scale_fill_manual(values = c("Songs Sang On" = "blue", "Average Sentiment" = "orange")) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+```{r}
+
+# Calculate the average sentiment for each album
+average_sentiment_by_album <- lyrics_sent %>%
+  group_by(album) %>%
+  summarise(average_sentiment = mean(sentiment, na.rm = TRUE))
+
+# Sort the data by average sentiment (optional)
+average_sentiment_by_album <- average_sentiment_by_album %>%
+  arrange(average_sentiment)
+
+# Create the bar graph using ggplot2
+ggplot(data = average_sentiment_by_album, aes(x = album, y = average_sentiment)) +
+  geom_bar(stat = "identity", fill = "blue", width = 0.6) +
+  labs(title = "Average Sentiment by Album",
+       x = "Album",
+       y = "Average Sentiment Score") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+```{r}
+
+# Create the long-format representation for songwriter indicators and sentiment
+long_lyrics_sent <- lyrics_sent %>%
+  pivot_longer(cols = starts_with("songwriter_"),
+               names_to = "songwriter",
+               values_to = "contributed") %>%
+  filter(contributed == 1) %>%
+  select(-contributed) %>%
+  left_join(., lyrics_sent %>% select(doc_id, sentiment), by = "doc_id")
+
+# Calculate the average sentiment for each songwriter
+average_sentiment_by_songwriter <- long_lyrics_sent %>%
+  group_by(songwriter) %>%
+  summarise(average_sentiment = mean(sentiment.x, na.rm = TRUE))
+
+# Sort the data by average sentiment (optional)
+average_sentiment_by_songwriter <- average_sentiment_by_songwriter %>%
+  arrange(average_sentiment)
+
+# Create the bar graph using ggplot2
+ggplot(data = average_sentiment_by_songwriter, aes(x = songwriter, y = average_sentiment)) +
+  geom_bar(stat = "identity", fill = "blue", width = 0.6) +
+  labs(title = "Average Sentiment by Songwriter",
+       x = "Songwriter",
+       y = "Average Sentiment Score") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+```{r}
+
+
+
+# Sort songs by sentiment scores (from most positive to most negative)
+sorted_lyrics_sent <- lyrics_sent %>%
+  arrange(sentiment)
+
+# Select the top 10 most positive and negative songs
+top_10_positive <- head(sorted_lyrics_sent, 10)
+top_10_negative <- tail(sorted_lyrics_sent, 10)
+
+# Create bar graph for the 10 most positive songs
+ggplot(data = top_10_positive, aes(x = reorder(doc_id, sentiment), y = sentiment)) +
+  geom_bar(stat = "identity", fill = "red", width = 0.6) +
+  labs(title = "Top 10 Most Negative Songs",
+       x = "Song",
+       y = "Sentiment Score") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1))
+
+# Create bar graph for the 10 most negative songs
+ggplot(data = top_10_negative, aes(x = reorder(doc_id, sentiment), y = sentiment)) +
+  geom_bar(stat = "identity", fill = "green", width = 0.6) +
+  labs(title = "Top 10 Most Positive Songs",
+       x = "Song",
+       y = "Sentiment Score") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+```{r}
+# file_path <- "D:\\Princeton\\Beatles Lyrics Project\\lyrics_filtered.csv"
+
+# write.csv(lyrics, file = file_path, row.names = FALSE)
+```
+
+```{r}
+# file_path <- "D:\\Princeton\\Beatles Lyrics Project\\lyrics_sent.csv"
+
+# write.csv(lyrics_sent, file = file_path, row.names = FALSE)
+```

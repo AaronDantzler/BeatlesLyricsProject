@@ -1,0 +1,368 @@
+---
+title: "BeatlesVisualizations"
+author: "Aaron Dantzler"
+date: "2023-08-06"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# load packages
+library(dplyr)
+library(ggplot2)
+library(tidytext)
+```
+
+```{r}
+# Set working directory and load data
+lyrics <- read.csv("D:\\Princeton\\Beatles Lyrics Project\\lyrics_filtered.csv")
+```
+
+# Visualize Beatles Songs Per Year
+
+```{r}
+# Calculate the number of songs written for each year
+songs_per_year <- lyrics %>%
+  group_by(year) %>%
+  summarise(number_of_songs = n())
+
+# Create the line graph using ggplot2
+ggplot(data = songs_per_year, aes(x = year, y = number_of_songs)) +
+  geom_line(color = "blue") +
+  geom_point(color = "blue", size = 3) +
+  labs(title = "Number of Songs Written for Each Year",
+       x = "Year",
+       y = "Number of Songs") +
+  theme_minimal()
+```
+
+```{r}
+# Create the long-format representation
+long_lyrics <- lyrics %>%
+  pivot_longer(cols = starts_with("songwriter_"),
+               names_to = "songwriter",
+               values_to = "contributed") %>%
+  filter(contributed == 1) %>%
+  select(-contributed)
+
+# Calculate the number of songs written by each Beatle
+songs_by_beatle <- long_lyrics %>%
+  group_by(songwriter) %>%
+  summarise(total_songs_written = n_distinct(song))
+
+# Create the bar graph using ggplot2
+ggplot(data = songs_by_beatle, aes(x = songwriter, y = total_songs_written, fill = songwriter)) +
+  geom_bar(stat = "identity", width = 0.6) +
+  labs(title = "Number of Songs Written by Each Beatle",
+       x = "Beatle (Songwriter)",
+       y = "Number of Songs") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+```{r}
+# Create the long-format representation
+long_lyrics <- lyrics %>%
+  pivot_longer(cols = starts_with("vocals_"),
+               names_to = "songwriter",
+               values_to = "sang_on") %>%
+  filter(sang_on == 1) %>%
+  select(-sang_on)
+
+# Calculate the number of songs each Beatle sang on
+songs_by_beatle <- long_lyrics %>%
+  group_by(songwriter) %>%
+  summarise(total_songs_sang_on = n_distinct(song))
+
+# Create the bar graph using ggplot2
+ggplot(data = songs_by_beatle, aes(x = songwriter, y = total_songs_sang_on, fill = songwriter)) +
+  geom_bar(stat = "identity", width = 0.6) +
+  labs(title = "Number of Songs Each Beatle Sang On",
+       x = "Beatle (Singer)",
+       y = "Number of Songs") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+```{r include=FALSE}
+tidy <- lyrics %>%
+  unnest_tokens(word, text)
+```
+
+```{r}
+data(stop_words)
+
+tidy <- tidy %>%
+  anti_join(stop_words)
+```
+
+
+
+```{r}
+library(ggplot2)
+
+tidy %>%
+  count(word, sort = TRUE) %>%
+  filter(n > 50) %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word)) +
+  geom_col() +
+  labs(y = NULL)
+```
+
+```{r}
+library(ggplot2)
+
+tidy %>%
+  filter(songwriter_Harrison == 1) %>%
+  count(word, sort = TRUE) %>%
+  filter(n > 10) %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word)) +
+  geom_col() +
+  labs(y = NULL)
+```
+```{r}
+library(ggplot2)
+
+tidy %>%
+  filter(songwriter_Lennon == 1) %>%
+  count(word, sort = TRUE) %>%
+  filter(n > 30) %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word)) +
+  geom_col() +
+  labs(y = NULL)
+```
+
+```{r}
+library(ggplot2)
+
+tidy %>%
+  filter(songwriter_McCartney == 1) %>%
+  count(word, sort = TRUE) %>%
+  filter(n > 30) %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word)) +
+  geom_col() +
+  labs(y = NULL)
+```
+
+```{r}
+library(ggplot2)
+
+tidy %>%
+  filter(songwriter_Starr == 1) %>%
+  count(word, sort = TRUE) %>%
+  filter(n > 3) %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word)) +
+  geom_col() +
+  labs(y = NULL)
+```
+
+```{r}
+tidy_mccartney <- tidy %>% filter(songwriters == "McCartney")
+tidy_lennon <- tidy %>% filter(songwriters == "Lennon")
+```
+
+
+```{r include=FALSE}
+library(tidyr)
+
+frequency <- bind_rows(mutate(tidy_mccartney, songwriters = "McCartney"),
+                       mutate(tidy_lennon, songwriters = "Lennon")) %>% 
+  mutate(word = str_extract(word, "[a-z']+")) %>%
+  count(songwriters, word) %>%
+  group_by(songwriters) %>%
+  mutate(proportion = n / sum(n)) %>% 
+  select(-n) %>% 
+  pivot_wider(names_from = songwriters, values_from = proportion) %>%
+  pivot_longer(`Lennon`,
+               names_to = "songwriters", values_to = "proportion")
+
+```
+
+```{r}
+library(scales)
+
+# expect a warning about rows with missing values being removed
+ggplot(frequency, aes(x = proportion, y = `McCartney`, 
+                      color = abs(`McCartney` - proportion))) +
+  geom_abline(color = "gray40", lty = 2) +
+  geom_jitter(alpha = 0.1, size = 2.5, width = 0.3, height = 0.3) +
+  geom_text(aes(label = word), check_overlap = TRUE, vjust = 1.5) +
+  scale_x_log10(labels = percent_format()) +
+  scale_y_log10(labels = percent_format()) +
+  scale_color_gradient(limits = c(0, 0.001), 
+                       low = "darkslategray4", high = "gray75") +
+  facet_wrap(~songwriters, ncol = 2) +
+  theme(legend.position="none") +
+  labs(y = "McCartney", x = NULL)
+```
+
+## Above the Line is more associated with McCartney, below is Lennon
+
+```{r include=FALSE}
+bing_word_counts <- tidy %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  ungroup()
+
+```
+
+```{r}
+bing_word_counts %>%
+  group_by(sentiment) %>%
+  slice_max(n, n = 10) %>% 
+  ungroup() %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word, fill = sentiment)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~sentiment, scales = "free_y") +
+  labs(x = "Contribution to sentiment",
+       y = NULL)
+```
+
+```{r}
+tidy_mccartney <- tidy %>% filter(songwriter_McCartney == 1)
+tidy_lennon <- tidy %>% filter(songwriter_Lennon == 1)
+tidy_harrison <- tidy %>% filter(songwriter_Harrison == 1)
+tidy_starr <- tidy %>% filter(songwriter_Starr == 1)
+```
+
+```{r include=FALSE}
+bing_word_counts <- tidy_mccartney %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  ungroup()
+
+```
+
+```{r}
+bing_word_counts %>%
+  group_by(sentiment) %>%
+  slice_max(n, n = 10) %>% 
+  ungroup() %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word, fill = sentiment)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~sentiment, scales = "free_y") +
+  labs(x = "Contribution to sentiment",
+       y = NULL)
+```
+
+```{r include=FALSE}
+bing_word_counts <- tidy_lennon %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  ungroup()
+
+```
+
+```{r}
+bing_word_counts %>%
+  group_by(sentiment) %>%
+  slice_max(n, n = 10) %>% 
+  ungroup() %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word, fill = sentiment)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~sentiment, scales = "free_y") +
+  labs(x = "Contribution to sentiment",
+       y = NULL)
+```
+
+```{r}
+library(wordcloud)
+
+tidy %>%
+  anti_join(stop_words) %>%
+  count(word) %>%
+  with(wordcloud(word, n, max.words = 100))
+```
+
+```{r}
+library(reshape2)
+
+tidy %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+  comparison.cloud(colors = c("gray20", "gray80"),
+                   max.words = 100)
+```
+
+# tf_idf, term frequency and inverse document frequency tells us the words that are important for a document but are not important for the corpus as a whole. Filters out common words that many documents use.
+
+```{r}
+tidy_words <- tidy %>%
+  count(songwriter_Lennon, word, sort = TRUE)
+```
+
+
+```{r include=FALSE}
+tidy_tf_idf <- tidy_words %>%
+  bind_tf_idf(word, songwriter_Lennon, n)
+
+```
+
+```{r include=FALSE}
+tidy_tf_idf %>%
+  arrange(desc(tf_idf))
+```
+
+```{r}
+library(forcats)
+
+tidy_tf_idf %>%
+  group_by(songwriter_Lennon) %>%
+  slice_max(tf_idf, n = 15) %>%
+  ungroup() %>%
+  ggplot(aes(tf_idf, fct_reorder(word, tf_idf), fill = songwriter_Lennon)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~songwriter_Lennon, ncol = 2, scales = "free") +
+  labs(x = "tf-idf", y = NULL)
+```
+
+# tf_idf, term frequency and inverse document frequency tells us the words that are important for a document but are not important for the corpus as a whole. Filters out common words that many documents use.
+
+```{r}
+tidy_words <- tidy %>%
+  count(songwriter_McCartney, word, sort = TRUE)
+```
+
+
+```{r include=FALSE}
+tidy_tf_idf <- tidy_words %>%
+  bind_tf_idf(word, songwriter_McCartney, n)
+
+```
+
+```{r include=FALSE}
+tidy_tf_idf %>%
+  arrange(desc(tf_idf))
+```
+
+```{r}
+library(forcats)
+
+tidy_tf_idf %>%
+  group_by(songwriter_McCartney) %>%
+  slice_max(tf_idf, n = 15) %>%
+  ungroup() %>%
+  ggplot(aes(tf_idf, fct_reorder(word, tf_idf), fill = songwriter_McCartney)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~songwriter_McCartney, ncol = 2, scales = "free") +
+  labs(x = "tf-idf", y = NULL)
+```
+
+```{r}
+
+```
+
