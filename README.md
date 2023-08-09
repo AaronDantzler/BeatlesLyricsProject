@@ -24,6 +24,16 @@ In this project, I tried to visualize and examine any cool patterns that might o
 
 ![image](https://github.com/AaronDantzler/BeatlesLyricsProject/assets/113250815/705ad186-6d0c-4fff-8ad7-85cef4354592)
 
+![image](https://github.com/AaronDantzler/BeatlesLyricsProject/assets/113250815/409164b3-407a-494b-8506-c19977eba4cf)
+
+![image](https://github.com/AaronDantzler/BeatlesLyricsProject/assets/113250815/957f5a6e-230e-4e76-a32a-e6922d49ba07)
+
+![image](https://github.com/AaronDantzler/BeatlesLyricsProject/assets/113250815/9e611dbf-4f09-4b36-b23f-52c2a32ffabf)
+
+![image](https://github.com/AaronDantzler/BeatlesLyricsProject/assets/113250815/ce8864bd-7ba1-4bc3-a17c-21b1eb075d0d)
+
+
+
 
 
 
